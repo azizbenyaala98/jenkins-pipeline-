@@ -1,0 +1,131 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Utilize the Node.js installation name from Global Tool Configuration
+        NODEJS_HOME = tool 'NodeJS'
+        PATH="${NODEJS_HOME}/bin:${env.PATH}"
+        
+        // Docker Hub credentials
+        DOCKER_HUB_USERNAME = 'azizbenyaala'
+        DOCKER_HUB_PASSWORD = 'azizaziz1998'
+    }
+
+    stages {
+        stage('Checkout Front code') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], userRemoteConfigs: [[url: 'https://github.com/azizbenyaala98/devops_project_front']]])
+            }
+        }
+
+        stage('Build with npm') {
+            steps {
+                script {
+                    catchError {
+                        sh 'npm install'
+                        sh 'npm run build'
+                    }
+                }
+            }
+        }
+
+        stage('Docker Build NextJS') {
+            steps {
+                script {
+                    sh 'docker build -t azizbenyaala/devopsproject:latest .'
+                }
+            }
+        }
+
+        stage('Tagging Image NextJS') {
+            steps {
+                script {
+                    sh 'docker tag azizbenyaala/devopsproject:latest azizbenyaala/devopsproject:latest'
+                }
+            }
+        }
+
+        stage('Push to Docker Hub NextJS') {
+            steps {
+                script {
+                    // Docker login with explicit credentials
+                    sh "docker login -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD}"
+
+                    // Push the tagged image for NextJS
+                    sh 'docker push azizbenyaala/devopsproject:latest'
+                }
+            }
+        }
+
+        stage('Checkout NestJS code') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], userRemoteConfigs: [[url: 'https://github.com/azizbenyaala98/devops_project_back']]])
+            }
+        }
+
+        stage('Build with npm NestJS') {
+            steps {
+                script {
+                    catchError {
+                        sh 'npm install'
+                        sh 'npm run build'
+                    }
+                }
+            }
+        }
+
+        stage('Docker Build NestJS') {
+            steps {
+                script {
+                    sh 'docker build -t azizbenyaala/devopsproject:backendlatest .'
+                }
+            }
+        }
+
+        stage('Tagging Image NestJS') {
+            steps {
+                script {
+                    sh 'docker tag azizbenyaala/devopsproject:backendlatest azizbenyaala/devopsproject:backendlatest'
+                }
+            }
+        }
+
+        stage('Push to Docker Hub NestJS') {
+            steps {
+                script {
+                    // Docker login with explicit credentials
+                    sh "docker login -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD}"
+
+                    // Push the tagged image for NestJS
+                    sh 'docker push azizbenyaala/devopsproject:backendlatest'
+                }
+            }
+        }
+
+        stage('Deploy application') {
+            steps {
+                sh 'docker-compose up -d'  
+            }
+        }
+            
+        stage('Email Notification') {
+            steps {
+                script {
+                    currentBuild.result = 'SUCCESS' // Set the build result to success by default
+
+                    // Check if any previous stages failed
+                    if (currentBuild.resultIsBetterOrEqualTo('FAILURE')) {
+                        currentBuild.result = 'FAILURE'
+                    }
+
+                    // Send email notification
+                    emailext body: "Pipeline ${currentBuild.result}: Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}\n\n${BUILD_URL}",
+                             subject: "Jenkins Build Notification - ${currentBuild.result}",
+                             to: 'azizbenyaala@gmail.com',
+                             attachLog: true,
+                             recipientProviders: [[$class: 'CulpritsRecipientProvider']]
+                }
+            }
+        }
+    }
+}
